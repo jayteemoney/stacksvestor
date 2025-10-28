@@ -7,6 +7,11 @@ cache_dir = "./.cache"
 requirements = []
 boot_contracts = []
 
+[contracts.sip-010-trait]
+path = "contracts/sip-010-trait.clar"
+clarity_version = 2
+epoch = 2.5
+
 [contracts.stacksvestor]
 path = "contracts/stacksvestor.clar"
 clarity_version = 2

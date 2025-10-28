@@ -1,0 +1,48 @@
+---
+id: 0
+name: "Simulated deployment, used as a default for `clarinet console`, `clarinet test` and `clarinet check`"
+network: simnet
+genesis:
+  wallets:
+    - name: deployer
+      address: ST1HTBVD3JG9C05J7HBJTHGR0GGW7KXW28M5JS8QE
+      balance: "1000000000000"
+      sbtc-balance: "1000000000"
+    - name: wallet_1
+      address: ST1J4G6RR643BCG8G8SR6M2D9Z9KXT2NJDRK3FBTK
+      balance: "1000000000000"
+      sbtc-balance: "1000000000"
+    - name: wallet_2
+      address: ST20ATRN26N9P05V2F1RHFRV24X8C8M3W54E427B2
+      balance: "1000000000000"
+      sbtc-balance: "1000000000"
+  contracts:
+    - genesis
+    - lockup
+    - bns
+    - cost-voting
+    - costs
+    - pox
+    - costs-2
+    - pox-2
+    - costs-3
+    - pox-3
+    - pox-4
+    - signers
+    - signers-voting
+    - costs-4
+plan:
+  batches:
+    - id: 0
+      transactions:
+        - emulated-contract-publish:
+            contract-name: sip-010-trait
+            emulated-sender: ST1HTBVD3JG9C05J7HBJTHGR0GGW7KXW28M5JS8QE
+            path: contracts/sip-010-trait.clar
+            clarity-version: 2
+        - emulated-contract-publish:
+            contract-name: stacksvestor
+            emulated-sender: ST1HTBVD3JG9C05J7HBJTHGR0GGW7KXW28M5JS8QE
+            path: contracts/stacksvestor.clar
+            clarity-version: 2
+      epoch: "2.5"

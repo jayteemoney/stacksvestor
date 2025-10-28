@@ -9,7 +9,7 @@
 ;; ==============================================================================
 
 ;; SIP-010 Fungible Token Trait
-(use-trait sip010-token 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard.sip-010-trait)
+(use-trait sip010-token .sip-010-trait.sip-010-trait)
 
 ;; ==============================================================================
 ;; CONSTANTS
@@ -87,6 +87,21 @@
   (is-eq caller (var-get admin))
 )
 
+;; Validate that a principal is not the contract itself
+(define-private (validate-principal (principal-to-check principal))
+  (not (is-eq principal-to-check (as-contract tx-sender)))
+)
+
+;; Validate that an amount is greater than zero
+(define-private (validate-amount (amount uint))
+  (> amount u0)
+)
+
+;; Validate that a height is in the future
+(define-private (validate-height (height uint))
+  (> height block-height)
+)
+
 ;; ==============================================================================
 ;; PUBLIC FUNCTIONS
 ;; ==============================================================================
@@ -112,11 +127,14 @@
     ;; Validate token contract matches the configured one
     (asserts! (is-eq (some token-principal) (var-get token-contract)) ERR-TOKEN-NOT-SET)
 
+    ;; Validate recipient is not the contract itself
+    (asserts! (validate-principal recipient) ERR-INVALID-RECIPIENT)
+
     ;; Validate amount is greater than zero
-    (asserts! (> amount u0) ERR-INVALID-AMOUNT)
+    (asserts! (validate-amount amount) ERR-INVALID-AMOUNT)
 
     ;; Validate unlock height is in the future
-    (asserts! (> unlock-height current-height) ERR-INVALID-HEIGHT)
+    (asserts! (validate-height unlock-height) ERR-INVALID-HEIGHT)
 
     ;; Ensure beneficiary doesn't already exist
     (asserts! (is-none (map-get? vestings { recipient: recipient })) ERR-ALREADY-EXISTS)
@@ -165,7 +183,8 @@
 (define-public (claim-tokens (token <sip010-token>))
   (let
     (
-      (vesting-data (unwrap! (map-get? vestings { recipient: tx-sender }) ERR-NOT-FOUND))
+      (caller tx-sender)
+      (vesting-data (unwrap! (map-get? vestings { recipient: caller }) ERR-NOT-FOUND))
       (amount (get amount vesting-data))
       (claimed (get claimed vesting-data))
       (unlock-height (get unlock-height vesting-data))
@@ -182,11 +201,11 @@
     (asserts! (>= current-height unlock-height) ERR-TOKENS-LOCKED)
 
     ;; Transfer tokens from contract to beneficiary
-    (match (as-contract (contract-call? token transfer amount tx-sender (get recipient vesting-data) none))
+    (match (as-contract (contract-call? token transfer amount tx-sender caller none))
       success-val (begin
         ;; Mark as claimed
         (map-set vestings
-          { recipient: tx-sender }
+          { recipient: caller }
           (merge vesting-data { claimed: true })
         )
 
@@ -270,6 +289,9 @@
     ;; Validate that caller is admin
     (asserts! (is-admin tx-sender) ERR-NOT-AUTHORIZED)
 
+    ;; Validate recipient is not the contract itself
+    (asserts! (validate-principal recipient) ERR-INVALID-RECIPIENT)
+
     ;; Validate token contract matches the configured one
     (asserts! (is-eq (some token-principal) (var-get token-contract)) ERR-TOKEN-NOT-SET)
 
@@ -303,6 +325,12 @@
   (begin
     ;; Validate that caller is current admin
     (asserts! (is-admin tx-sender) ERR-NOT-AUTHORIZED)
+
+    ;; Validate new admin is not the contract itself
+    (asserts! (validate-principal new-admin) ERR-INVALID-RECIPIENT)
+
+    ;; Validate new admin is different from current admin
+    (asserts! (not (is-eq new-admin (var-get admin))) ERR-ALREADY-EXISTS)
 
     ;; Set new admin
     (var-set admin new-admin)
@@ -345,8 +373,11 @@
     ;; Validate that caller is admin
     (asserts! (is-admin tx-sender) ERR-NOT-AUTHORIZED)
 
+    ;; Validate recipient is not the contract itself
+    (asserts! (validate-principal recipient) ERR-INVALID-RECIPIENT)
+
     ;; Validate amount is greater than zero
-    (asserts! (> amount u0) ERR-INVALID-AMOUNT)
+    (asserts! (validate-amount amount) ERR-INVALID-AMOUNT)
 
     ;; Transfer tokens from contract to recipient
     (match (as-contract (contract-call? token transfer amount tx-sender recipient none))
@@ -375,16 +406,19 @@
       (current-total (var-get total-beneficiaries))
       (current-success (get success-count context))
     )
-    ;; Validate amount is greater than zero
-    (if (is-eq amount u0)
-      context  ;; Skip if zero amount
-      ;; Validate unlock height is in the future
-      (if (<= unlock-height current-height)
-        context  ;; Skip if invalid unlock height
-        ;; Skip if beneficiary already exists (don't fail entire airdrop)
-        (if (is-some (map-get? vestings { recipient: recipient }))
-          context  ;; Skip existing beneficiary
-          ;; All validations passed, proceed with adding vesting
+    ;; Validate recipient is not the contract itself
+    (if (not (validate-principal recipient))
+      context  ;; Skip if invalid recipient
+      ;; Validate amount is greater than zero
+      (if (not (validate-amount amount))
+        context  ;; Skip if zero amount
+        ;; Validate unlock height is in the future
+        (if (not (validate-height unlock-height))
+          context  ;; Skip if invalid unlock height
+          ;; Skip if beneficiary already exists (don't fail entire airdrop)
+          (if (is-some (map-get? vestings { recipient: recipient }))
+            context  ;; Skip existing beneficiary
+            ;; All validations passed, proceed with adding vesting
           (begin
             ;; Add vesting entry
             (map-set vestings
@@ -416,6 +450,7 @@
             ;; Return context with incremented success count
             (merge context { success-count: (+ current-success u1) })
           )
+          )
         )
       )
     )
@@ -432,7 +467,7 @@
   (let
     (
       (token-principal (contract-of token))
-      (total-amount (fold + (map get-amount recipients) u0))
+      (total-amount (fold sum-amounts recipients u0))
     )
     ;; Validate that caller is admin
     (asserts! (is-admin tx-sender) ERR-NOT-AUTHORIZED)
@@ -461,6 +496,11 @@
 ;; Helper to get amount from entry
 (define-private (get-amount (entry { recipient: principal, amount: uint, unlock-height: uint }))
   (get amount entry)
+)
+
+;; Helper to sum amounts for fold operation
+(define-private (sum-amounts (entry { recipient: principal, amount: uint, unlock-height: uint }) (acc uint))
+  (+ acc (get amount entry))
 )
 
 ;; ==============================================================================
