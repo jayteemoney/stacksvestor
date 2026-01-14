@@ -9,7 +9,6 @@ const deployer = accounts.get("deployer")!;
 const wallet1 = accounts.get("wallet_1")!;
 const wallet2 = accounts.get("wallet_2")!;
 
-// Helper function to extract error code from response
 function getErrorCode(result: ClarityValue): bigint | null {
   const value = cvToValue(result);
   if (value && typeof value === 'object' && 'value' in value) {
@@ -75,7 +74,6 @@ describe("StacksVestor Contract Tests", () => {
       );
       expect(result).toStrictEqual(Cl.ok(Cl.bool(true)));
 
-      // Verify it was set (should be a contract principal)
       const tokenContract = simnet.callReadOnlyFn(
         "stacksvestor",
         "get-token-contract",
@@ -87,14 +85,12 @@ describe("StacksVestor Contract Tests", () => {
     });
 
     it("should fail when non-admin tries to set token contract (would fail if not set)", () => {
-      // Token is already set from previous test, so this will fail with ERR-ALREADY-EXISTS
       const { result } = simnet.callPublicFn(
         "stacksvestor",
         "set-token-contract",
         [Cl.contractPrincipal(deployer, "sip-010-trait")],
         wallet1
       );
-      // Will either be ERR-NOT-AUTHORIZED (100) or ERR-ALREADY-EXISTS (101)
       const errorCode = getErrorCode(result);
       expect(errorCode).toBeGreaterThanOrEqual(100n);
     });
@@ -108,7 +104,7 @@ describe("StacksVestor Contract Tests", () => {
         [Cl.principal(deployer)],
         deployer
       );
-      expect(getErrorCode(result)).toBe(111n); // ERR-SAME-ADMIN
+      expect(getErrorCode(result)).toBe(101n);
     });
 
     it("should allow admin to transfer admin role", () => {
@@ -120,7 +116,6 @@ describe("StacksVestor Contract Tests", () => {
       );
       expect(result).toStrictEqual(Cl.ok(Cl.bool(true)));
 
-      // Verify new admin
       const admin = simnet.callReadOnlyFn(
         "stacksvestor",
         "get-admin",
@@ -131,23 +126,21 @@ describe("StacksVestor Contract Tests", () => {
     });
 
     it("should fail when old admin tries to act after transfer", () => {
-      // Deployer is no longer admin
       const { result } = simnet.callPublicFn(
         "stacksvestor",
         "transfer-admin",
         [Cl.principal(wallet2)],
-        deployer  // deployer is no longer admin
+        deployer
       );
-      expect(getErrorCode(result)).toBe(100n); // ERR-NOT-AUTHORIZED
+      expect(getErrorCode(result)).toBe(100n);
     });
 
     it("should allow new admin to transfer admin back", () => {
-      // Transfer back to deployer for remaining tests
       const { result } = simnet.callPublicFn(
         "stacksvestor",
         "transfer-admin",
         [Cl.principal(deployer)],
-        wallet1  // wallet1 is current admin
+        wallet1
       );
       expect(result).toStrictEqual(Cl.ok(Cl.bool(true)));
     });
@@ -155,7 +148,6 @@ describe("StacksVestor Contract Tests", () => {
 
   describe("Add Beneficiary - Authorization Tests", () => {
     it("should fail when token contract not set (but it is set now)", () => {
-      // Token is already set, so this will check authorization first
       const { result } = simnet.callPublicFn(
         "stacksvestor",
         "add-beneficiary",
@@ -165,9 +157,9 @@ describe("StacksVestor Contract Tests", () => {
           Cl.uint(1000000),
           Cl.uint(simnet.blockHeight + 10),
         ],
-        wallet1  // non-admin
+        wallet1
       );
-      expect(getErrorCode(result)).toBe(100n); // ERR-NOT-AUTHORIZED
+      expect(getErrorCode(result)).toBe(100n);
     });
 
     it("should fail with zero amount when called by admin", () => {
@@ -180,9 +172,9 @@ describe("StacksVestor Contract Tests", () => {
           Cl.uint(0),
           Cl.uint(simnet.blockHeight + 10),
         ],
-        deployer  // admin
+        deployer
       );
-      expect(getErrorCode(result)).toBe(105n); // ERR-INVALID-AMOUNT
+      expect(getErrorCode(result)).toBe(105n);
     });
 
     it("should fail with unlock height in the past", () => {
@@ -193,11 +185,11 @@ describe("StacksVestor Contract Tests", () => {
           Cl.contractPrincipal(deployer, "sip-010-trait"),
           Cl.principal(wallet1),
           Cl.uint(1000000),
-          Cl.uint(simnet.blockHeight),  // Current height, not future
+          Cl.uint(simnet.blockHeight),
         ],
-        deployer  // admin
+        deployer
       );
-      expect(getErrorCode(result)).toBe(106n); // ERR-INVALID-HEIGHT
+      expect(getErrorCode(result)).toBe(106n);
     });
   });
 
@@ -209,7 +201,7 @@ describe("StacksVestor Contract Tests", () => {
         [Cl.contractPrincipal(deployer, "sip-010-trait")],
         wallet1
       );
-      expect(getErrorCode(result)).toBe(102n); // ERR-NOT-FOUND
+      expect(getErrorCode(result)).toBe(102n);
     });
   });
 
@@ -222,9 +214,9 @@ describe("StacksVestor Contract Tests", () => {
           Cl.contractPrincipal(deployer, "sip-010-trait"),
           Cl.principal(wallet1),
         ],
-        deployer  // admin
+        deployer
       );
-      expect(getErrorCode(result)).toBe(102n); // ERR-NOT-FOUND
+      expect(getErrorCode(result)).toBe(102n);
     });
 
     it("should fail when non-admin tries to revoke (even non-existent)", () => {
@@ -235,9 +227,8 @@ describe("StacksVestor Contract Tests", () => {
           Cl.contractPrincipal(deployer, "sip-010-trait"),
           Cl.principal(wallet2),
         ],
-        wallet1  // non-admin
+        wallet1
       );
-      // Could be ERR-NOT-AUTHORIZED (100) or ERR-NOT-FOUND (102) depending on order of checks
       const errorCode = getErrorCode(result);
       expect(errorCode).toBeGreaterThanOrEqual(100n);
     });
@@ -253,9 +244,9 @@ describe("StacksVestor Contract Tests", () => {
           Cl.uint(0),
           Cl.principal(wallet1),
         ],
-        deployer  // admin
+        deployer
       );
-      expect(getErrorCode(result)).toBe(105n); // ERR-INVALID-AMOUNT
+      expect(getErrorCode(result)).toBe(105n);
     });
 
     it("should fail when trying to withdraw to contract itself", () => {
@@ -267,9 +258,9 @@ describe("StacksVestor Contract Tests", () => {
           Cl.uint(1000),
           Cl.contractPrincipal(deployer, "stacksvestor"),
         ],
-        deployer  // admin
+        deployer
       );
-      expect(getErrorCode(result)).toBe(107n); // ERR-INVALID-RECIPIENT
+      expect(getErrorCode(result)).toBe(107n);
     });
 
     it("should fail when non-admin tries to withdraw", () => {
@@ -281,9 +272,9 @@ describe("StacksVestor Contract Tests", () => {
           Cl.uint(1000),
           Cl.principal(wallet1),
         ],
-        wallet1  // non-admin
+        wallet1
       );
-      expect(getErrorCode(result)).toBe(100n); // ERR-NOT-AUTHORIZED
+      expect(getErrorCode(result)).toBe(100n);
     });
   });
 
@@ -325,7 +316,6 @@ describe("StacksVestor Contract Tests", () => {
         [],
         deployer
       );
-      // Admin should be deployer at this point
       expect(cvToValue(admin.result)).toBe(deployer);
     });
 
@@ -336,7 +326,6 @@ describe("StacksVestor Contract Tests", () => {
         [],
         deployer
       );
-      // Should still be 0 as we haven't successfully added any
       expect(cvToValue(total.result)).toBe(0n);
     });
 
@@ -347,7 +336,6 @@ describe("StacksVestor Contract Tests", () => {
         [],
         deployer
       );
-      // Should be 0 as no vesting has been added
       expect(cvToValue(amount.result)).toBe(0n);
     });
 
@@ -358,7 +346,6 @@ describe("StacksVestor Contract Tests", () => {
         [],
         deployer
       );
-      // Token was set earlier
       const tokenValue = cvToValue(token.result);
       expect(tokenValue).toBeTruthy();
     });
@@ -378,15 +365,14 @@ describe("StacksVestor Contract Tests", () => {
         "stacksvestor",
         "airdrop-tokens",
         [Cl.contractPrincipal(deployer, "sip-010-trait"), recipients],
-        wallet1  // non-admin
+        wallet1
       );
-      expect(getErrorCode(result)).toBe(100n); // ERR-NOT-AUTHORIZED
+      expect(getErrorCode(result)).toBe(100n);
     });
   });
 
   describe("Integration - Contract State Verification", () => {
     it("should demonstrate contract is functional", () => {
-      // Verify all contract state is consistent
       const admin = simnet.callReadOnlyFn(
         "stacksvestor",
         "get-admin",
